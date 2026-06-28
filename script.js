@@ -918,27 +918,126 @@ function toggleGearCategory(header) {
 // Make globally accessible
 window.toggleGearCategory = toggleGearCategory;
 
-// ============================================
-// 11. PHOTOGRAPHY GRID
-// ============================================
-function renderPhotos() {
-  const container = document.getElementById('photoGrid');
+﻿PHOTO_STORAGE_KEY = "loey_photo_album"
 
-  photoData.forEach(photo => {
-    const tagHtml = photo.tags.map(t => `<span>${t}</span>`).join('');
-    const card = document.createElement('div');
-    card.className = 'photo-card';
-    card.innerHTML = `
-      <div class="photo-placeholder">📷 Day ${photo.day}</div>
-      <div class="photo-info">
-        <div class="photo-day">Day ${photo.day}</div>
-        <div class="photo-theme">${photo.theme}</div>
-        <div class="photo-time">${photo.time}</div>
-        <div class="photo-tags">${tagHtml}</div>
-      </div>
-    `;
+function loadPhotoAlbum() {
+  try { return JSON.parse(localStorage.getItem(PHOTO_STORAGE_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+
+function savePhotoAlbum(album) {
+  let total = 0;
+  Object.values(album).forEach(arr => { arr.forEach(p => { total += p.data.length; }); });
+  if (total > 4 * 1024 * 1024) {
+    if (!confirm("照片总大小已超过 4MB，继续保存可能影响性能。是否继续？")) return;
+  }
+  localStorage.setItem(PHOTO_STORAGE_KEY, JSON.stringify(album));
+  renderPhotoThumbs();
+}
+
+function handlePhotoUpload(day) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.multiple = true;
+  input.onchange = (e) => {
+    const files = Array.from(e.target.files);
+    const album = loadPhotoAlbum();
+    if (!album[day]) album[day] = [];
+    let loaded = 0;
+    files.forEach((f) => {
+      if (album[day].length >= 20) { alert("每个主题最多 20 张照片"); return; }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        album[day].push({ data: ev.target.result, name: f.name });
+        loaded++;
+        if (loaded === files.length) savePhotoAlbum(album);
+      };
+      reader.readAsDataURL(f);
+    });
+  };
+  input.click();
+}
+
+function removePhoto(day, idx) {
+  const album = loadPhotoAlbum();
+  if (album[day]) { album[day].splice(idx, 1); if (!album[day].length) delete album[day]; }
+  savePhotoAlbum(album);
+}
+
+function openLightbox(src) {
+  const overlay = document.getElementById("photoLightbox");
+  if (!overlay) return;
+  overlay.querySelector("img").src = src;
+  overlay.classList.add("active");
+}
+
+function closeLightbox() {
+  const overlay = document.getElementById("photoLightbox");
+  if (overlay) overlay.classList.remove("active");
+}
+
+function renderPhotoThumbs() {
+  const album = loadPhotoAlbum();
+  document.querySelectorAll(".photo-card").forEach((card) => {
+    const day = parseInt(card.dataset.day);
+    const thumbs = card.querySelector(".photo-thumbs");
+    if (!thumbs) return;
+    thumbs.innerHTML = "";
+    const photos = album[day] || [];
+    photos.forEach((p, i) => {
+      const wrap = document.createElement("div");
+      wrap.className = "photo-thumb-wrap";
+      const img = document.createElement("img");
+      img.className = "photo-thumb";
+      img.src = p.data;
+      img.loading = "lazy";
+      img.onclick = () => openLightbox(p.data);
+      const del = document.createElement("button");
+      del.className = "photo-del-btn";
+      del.innerHTML = "×";
+      del.onclick = (e) => { e.stopPropagation(); removePhoto(day, i); };
+      wrap.append(img, del);
+      thumbs.appendChild(wrap);
+    });
+  });
+}
+
+let photoLightboxHtml = false;
+function initPhotoLightbox() {
+  if (photoLightboxHtml) return;
+  photoLightboxHtml = true;
+  const div = document.createElement("div");
+  div.id = "photoLightbox";
+  div.className = "photo-lightbox";
+  div.onclick = closeLightbox;
+  div.innerHTML = '<img src="" alt="photo" class="photo-lightbox-img" onclick="event.stopPropagation()"/>';
+  document.body.appendChild(div);
+}
+
+function renderPhotos() {
+  initPhotoLightbox();
+  const container = document.getElementById("photoGrid");
+  photoData.forEach((photo) => {
+    const tagHtml = photo.tags.map((t) => "<span>" + t + "</span>").join("");
+    const card = document.createElement("div");
+    card.className = "photo-card";
+    card.dataset.day = photo.day;
+    card.innerHTML =
+      '<div class="photo-upload-area" onclick="handlePhotoUpload(' + photo.day + ')">' +
+        '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+        '<span>上传照片</span>' +
+      "</div>" +
+      '<div class="photo-thumbs"></div>' +
+      '<div class="photo-info">' +
+        '<div class="photo-day">Day ' + photo.day + "</div>" +
+        '<div class="photo-theme">' + photo.theme + "</div>" +
+        '<div class="photo-time">' + photo.time + "</div>" +
+        '<div class="photo-tags">' + tagHtml + "</div>" +
+      "</div>";
     container.appendChild(card);
   });
+  renderPhotoThumbs();
 }
 
 // ============================================
